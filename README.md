@@ -2,7 +2,7 @@
 __試作のデモテトリス__
 
 *コンパイル*
-* java Tetris*
+* java Tetris
   
 *実行方法*
-* javac Tetris*
+* javac Tetris
