@@ -7,5 +7,6 @@ __試作のデモテトリス__
 *実行方法*
 * javac Tetris
 
-Tetris.exeをダブルクリック
+* Tetris.exe(C#で書き直したバージョン)をダブルクリック
+
 
