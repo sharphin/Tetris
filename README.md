@@ -6,3 +6,6 @@ __試作のデモテトリス__
   
 *実行方法*
 * javac Tetris
+
+Tetris.exeをダブルクリック
+
