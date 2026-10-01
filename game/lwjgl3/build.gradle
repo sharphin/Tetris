@@ -1,0 +1,42 @@
+plugins {
+    id 'application'
+}
+
+def assetsDir = rootProject.file('assets')
+sourceSets.main.resources.srcDirs += [assetsDir]
+
+dependencies {
+    implementation project(':core')
+    implementation libs.gdx.backend.lwjgl3
+    implementation(variantOf(libs.gdx.platform) { classifier('natives-desktop') })
+}
+
+application {
+    mainClass = 'game.lwjgl3.Lwjgl3Launcher'
+    applicationName = 'Revenge'
+}
+
+tasks.named('run', JavaExec) {
+    workingDir = assetsDir
+    // macOS では GLFW をメインスレッドで動かす必要がある
+    if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+        jvmArgs '-XstartOnFirstThread'
+    }
+}
+
+// 依存関係をすべて含んだ実行可能 JAR (./gradlew lwjgl3:dist)
+tasks.register('dist', Jar) {
+    group = 'distribution'
+    archiveBaseName = 'tetris'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': application.mainClass
+    }
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    with jar
+    exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA')
+}
