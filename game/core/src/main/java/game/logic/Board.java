@@ -25,6 +25,8 @@ public class Board {
     public static final int MAX_SCORE = 9_999_999;
     public static final float SOFT_DROP_INTERVAL = 0.05f;
     private static final int[] LINE_SCORES = {0, 40, 100, 300, 1200};
+    private static final int[] TSPIN_SCORES = {400, 800, 1200, 1600};
+    private static final int[] TSPIN_MINI_SCORES = {100, 200, 400};
 
     private final int[][] field = createField();
     private final Random random;
@@ -42,6 +44,14 @@ public class Board {
     /** 接地した。次の落下タイミングで固定される (移動・回転で解除)。 */
     private boolean landed;
     private float elapsed;
+
+    /** 最後に成功した操作が回転だったか (T スピン判定用)。 */
+    private boolean lastMoveRotation;
+    /** 最後の回転で使った壁蹴りの番号 (0〜4)。 */
+    private int lastKick;
+    private TSpin lastTSpin = TSpin.NONE;
+    private int lastCleared;
+    private int lockCount;
 
     /** ライン消去の演出中に揃った行。演出が終わったら詰める。 */
     private final List<Integer> clearing = new ArrayList<>();
@@ -102,6 +112,7 @@ public class Board {
         }
         if (canMove(x, y + 1, rotation)) {
             y++;
+            lastMoveRotation = false;
             if (softDrop) dropScore++;
         } else {
             landed = true;
@@ -131,7 +142,10 @@ public class Board {
     private void move(int dx) {
         if (!canControl()) return;
         landed = false;
-        if (canMove(x + dx, y, rotation)) x += dx;
+        if (canMove(x + dx, y, rotation)) {
+            x += dx;
+            lastMoveRotation = false;
+        }
     }
 
     /**
@@ -143,13 +157,17 @@ public class Board {
         landed = false;
         boolean clockwise = dire == 1;
         int next = (rotation + (clockwise ? 1 : 3)) % 4;
-        for (int[] kick : SuperRotation.kicks(type, rotation, clockwise)) {
+        int[][] kicks = SuperRotation.kicks(type, rotation, clockwise);
+        for (int k = 0; k < kicks.length; k++) {
+            int[] kick = kicks[k];
             int nx = x + kick[0];
             int ny = y - kick[1]; // テーブルは y 上向き、フィールドは y 下向き
             if (canMove(nx, ny, next)) {
                 x = nx;
                 y = ny;
                 rotation = next;
+                lastMoveRotation = true;
+                lastKick = k;
                 return;
             }
         }
@@ -161,7 +179,9 @@ public class Board {
 
     public void hardDrop() {
         if (!canControl()) return;
-        y = getGhostY();
+        int ghost = getGhostY();
+        if (ghost > y) lastMoveRotation = false;
+        y = ghost;
         lock();
     }
 
@@ -196,12 +216,14 @@ public class Board {
         x = SPAWN_X;
         y = SPAWN_Y;
         landed = false;
+        lastMoveRotation = false;
         dropScore = 0;
         elapsed = 0;
         if (!canMove(x, y, rotation)) endGame();
     }
 
     private void lock() {
+        TSpin tSpin = detectTSpin();
         int[][] shape = Mino.shape(type, rotation);
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
@@ -223,7 +245,10 @@ public class Board {
                 level++;
             }
         }
-        addScore(cleared);
+        addScore(cleared, tSpin);
+        lastTSpin = tSpin;
+        lastCleared = cleared;
+        lockCount++;
         holdUsed = false;
 
         if (cleared > 0) {
@@ -267,8 +292,47 @@ public class Board {
         spawn(nextFromQueue());
     }
 
-    private void addScore(int cleared) {
-        long total = (long) score + (long) LINE_SCORES[cleared] * level;
+    /**
+     * T スピン判定 (3 コーナールール)。
+     * T ミノが回転で固定され、中心の斜め 4 マスのうち 3 マス以上が埋まっていれば T スピン。
+     * そのうち T の凸側の 2 マスが両方埋まっていなければ Mini。
+     * ただし最後の壁蹴り (5 番目) で入った場合は Mini ではなく T スピンにする。
+     */
+    private TSpin detectTSpin() {
+        if (type != Mino.T || !lastMoveRotation) return TSpin.NONE;
+        // T は 4x4 の中の 1〜3 行目・0〜2 列目の 3x3 に収まっている
+        int top = y + 1;
+        int bottom = y + 3;
+        int left = x;
+        int right = x + 2;
+        boolean tl = isOccupied(top, left);
+        boolean tr = isOccupied(top, right);
+        boolean bl = isOccupied(bottom, left);
+        boolean br = isOccupied(bottom, right);
+        int corners = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+        if (corners < 3) return TSpin.NONE;
+        boolean front = switch (rotation) {
+            case 0 -> tl && tr;
+            case 1 -> tr && br;
+            case 2 -> bl && br;
+            default -> tl && bl;
+        };
+        if (front || lastKick == 4) return TSpin.FULL;
+        return TSpin.MINI;
+    }
+
+    private boolean isOccupied(int row, int col) {
+        if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return true;
+        return field[row][col] != EMPTY;
+    }
+
+    private void addScore(int cleared, TSpin tSpin) {
+        int[] table = switch (tSpin) {
+            case FULL -> TSPIN_SCORES;
+            case MINI -> TSPIN_MINI_SCORES;
+            case NONE -> LINE_SCORES;
+        };
+        long total = (long) score + (long) table[Math.min(cleared, table.length - 1)] * level;
         if (softDrop) total += dropScore;
         score = (int) Math.min(total, MAX_SCORE);
     }
@@ -309,6 +373,10 @@ public class Board {
         y = newY;
     }
 
+    boolean isLastMoveRotation() {
+        return lastMoveRotation;
+    }
+
     // ---- 参照 ----
 
     public int getGhostY() {
@@ -331,6 +399,12 @@ public class Board {
     public int getLevel() { return level; }
     public int getLines() { return lines; }
     public int getScore() { return score; }
+    /** 直前に固定したミノの T スピン判定。 */
+    public TSpin getLastTSpin() { return lastTSpin; }
+    /** 直前に固定したミノで消えたライン数。 */
+    public int getLastCleared() { return lastCleared; }
+    /** これまでに固定したミノの数。 */
+    public int getLockCount() { return lockCount; }
     public boolean isClearing() { return !clearing.isEmpty(); }
     public boolean isGameOver() { return gameOver; }
     public boolean isGameClear() { return gameClear; }

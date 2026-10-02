@@ -19,6 +19,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 import game.logic.Board;
 import game.logic.Mino;
+import game.logic.TSpin;
 import game.util.GameUtil;
 
 public class MainScreen extends ScreenAdapter {
@@ -27,6 +28,8 @@ public class MainScreen extends ScreenAdapter {
     final int FIELD_X = 160;
     final int FIELD_Y = 40;
     final int SHIFT = 3;
+    final float MESSAGE_TIME = 1.5f;
+    static final String[] LINE_NAMES = {"", "SINGLE", "DOUBLE", "TRIPLE"};
 
     private Board board = new Board();
     // y 軸下向き (Swing / WinForms と同じ座標系) のカメラ
@@ -35,6 +38,11 @@ public class MainScreen extends ScreenAdapter {
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
     private final BitmapFont font = new BitmapFont(true);
+
+    /** T スピンを決めたときに出す表示。 */
+    private String[] message;
+    private float messageTimer;
+    private int seenLockCount;
 
     public MainScreen() {
         camera.setToOrtho(true, GameUtil.PANEL_X, GameUtil.PANEL_Y);
@@ -55,7 +63,11 @@ public class MainScreen extends ScreenAdapter {
                     case Input.Keys.UP -> board.hardDrop();
                     case Input.Keys.SPACE -> board.hold();
                     case Input.Keys.ENTER -> {
-                        if (board.isFinished()) board = new Board();
+                        if (board.isFinished()) {
+                            board = new Board();
+                            seenLockCount = 0;
+                            messageTimer = 0;
+                        }
                     }
                     default -> { return false; }
                 }
@@ -73,6 +85,7 @@ public class MainScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         board.update(delta);
+        updateMessage(delta);
 
         ScreenUtils.clear(Color.BLACK);
         viewport.apply();
@@ -82,6 +95,17 @@ public class MainScreen extends ScreenAdapter {
         drawWalls();
         drawBlocks();
         drawText();
+    }
+
+    private void updateMessage(float delta) {
+        messageTimer = Math.max(messageTimer - delta, 0);
+        if (board.getLockCount() == seenLockCount) return;
+        seenLockCount = board.getLockCount();
+        TSpin tSpin = board.getLastTSpin();
+        if (tSpin == TSpin.NONE) return;
+        String name = LINE_NAMES[Math.min(board.getLastCleared(), LINE_NAMES.length - 1)];
+        message = new String[] {tSpin == TSpin.MINI ? "T-SPIN MINI" : "T-SPIN", name};
+        messageTimer = MESSAGE_TIME;
     }
 
     /** 壁 (塗りつぶし)。 */
@@ -175,6 +199,14 @@ public class MainScreen extends ScreenAdapter {
         font.draw(batch, String.valueOf(board.getLines()), 30, 330);
         font.draw(batch, String.valueOf(board.getLevel()), 30, 400);
         font.draw(batch, String.valueOf(board.getScore()), 30, 470);
+
+        if (messageTimer > 0) {
+            font.getData().setScale(1.2f);
+            font.setColor(Color.YELLOW);
+            font.draw(batch, message[0], 30, 540);
+            font.draw(batch, message[1], 30, 562);
+            font.setColor(Color.WHITE);
+        }
 
         if (board.isFinished()) {
             font.getData().setScale(2.2f);
