@@ -134,12 +134,25 @@ public class Board {
         if (canMove(x + dx, y, rotation)) x += dx;
     }
 
-    /** dire: 1 = 右回転, 2 = 左回転。回転後にぶつかる場合は回転しない。 */
+    /**
+     * dire: 1 = 右回転, 2 = 左回転。
+     * スーパーローテーション: ぶつかる場合は壁蹴りテーブルの順にずらして試し、どこにも置けなければ回転しない。
+     */
     public void rotate(int dire) {
         if (!canControl()) return;
         landed = false;
-        int next = (rotation + (dire == 1 ? 1 : 3)) % 4;
-        if (canMove(x, y, next)) rotation = next;
+        boolean clockwise = dire == 1;
+        int next = (rotation + (clockwise ? 1 : 3)) % 4;
+        for (int[] kick : SuperRotation.kicks(type, rotation, clockwise)) {
+            int nx = x + kick[0];
+            int ny = y - kick[1]; // テーブルは y 上向き、フィールドは y 下向き
+            if (canMove(nx, ny, next)) {
+                x = nx;
+                y = ny;
+                rotation = next;
+                return;
+            }
+        }
     }
 
     public void setSoftDrop(boolean pressed) {
@@ -286,6 +299,14 @@ public class Board {
     /** テスト用: 落下中のミノを差し替える。 */
     void setCurrent(int newType) {
         spawn(newType);
+    }
+
+    /** テスト用: 落下中のミノを任意の位置・向きに置く。 */
+    void place(int newType, int newRotation, int newX, int newY) {
+        spawn(newType);
+        rotation = newRotation;
+        x = newX;
+        y = newY;
     }
 
     // ---- 参照 ----
