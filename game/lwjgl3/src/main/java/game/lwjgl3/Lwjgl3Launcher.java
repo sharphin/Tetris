@@ -11,7 +11,6 @@ public class Lwjgl3Launcher {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
         config.setTitle("TETRIS");
         config.setWindowedMode(GameUtil.PANEL_X, GameUtil.PANEL_Y);
-        config.setWindowPosition(300, 10);
         config.setResizable(false);
         config.useVsync(true);
         config.setForegroundFPS(60);
